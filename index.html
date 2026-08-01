@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bartender Adventure & Mini-Game</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #0b0b12;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 100vw;
+            max-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #000;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    // --- ASSETS MANIFEST ---
+    const ASSETS_URLS = {
+        bg1: "https://file.garden/akf8FgyB_k4lPnFb/background%201",
+        bg2: "https://file.garden/akf8FgyB_k4lPnFb/Background%202",
+        bg3: "https://file.garden/akf8FgyB_k4lPnFb/Background%203",
+        jasper: "https://file.garden/akf8FgyB_k4lPnFb/Jasper%20Agate",
+        straciattella: "https://file.garden/akf8FgyB_k4lPnFb/Straciattella",
+        rover: "https://file.garden/akf8FgyB_k4lPnFb/Rover%20The%20Raver",
+        pinkWhitney1: "https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney%20say",
+        pinkWhitney2: "https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney",
+        pinkWhitney3: "https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney%20say2",
+        bubble1: "https://file.garden/akf8FgyB_k4lPnFb/request",
+        bubble2: "https://file.garden/akf8FgyB_k4lPnFb/Pick%20a%20drink!",
+        bubble3: "https://file.garden/akf8FgyB_k4lPnFb/Good%20choise!",
+        drink1: "https://file.garden/akf8FgyB_k4lPnFb/Drink%201",
+        drink2: "https://file.garden/akf8FgyB_k4lPnFb/Drink%202",
+        drink3: "https://file.garden/akf8FgyB_k4lPnFb/Drink3",
+        howToPlay1: "https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%201",
+        howToPlay2: "https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%202",
+        howToPlay3: "https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%203",
+        arrowButton: "https://file.garden/akf8FgyB_k4lPnFb/Next%20button",
+        shaker: "https://file.garden/akf8FgyB_k4lPnFb/Illustration67%20(13).png",
+        star: "https://file.garden/akf8FgyB_k4lPnFb/Illustration67%20(14).png",
+        yay: "https://file.garden/akf8FgyB_k4lPnFb/Happy%20end",
+        oh: "https://file.garden/akf8FgyB_k4lPnFb/Oh",
+        replayButton: "https://file.garden/akf8FgyB_k4lPnFb/Replay%20button"
+    };
+
+    const TARGET_WIDTH = 1440;
+    const TARGET_HEIGHT = 2304;
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let scale = 1;
+    let canvasBounds = { left: 0, top: 0, width: 1440, height: 2304 };
+
+    // Game state variables
+    let currentLevel = 1; // Level 1 -> Level 2 -> Level 3
+    let currentScene = 'SCENE_ONE'; 
+
+    let loadedImages = {};
+    let imagesLoadedCount = 0;
+    const totalImages = Object.keys(ASSETS_URLS).length;
+
+    // Transition & Animation variables
+    let fadeOpacity = 1; 
+    let fadeTarget = 0; 
+    let fadeSpeed = 0.02;
+    let onFadeComplete = null;
+
+    let time = 0; 
+
+    // Scene 1 vars
+    let customerOffsetX = TARGET_WIDTH; // Floats in from right to left (0 = perfectly aligned in screen)
+    let customerTargetOffsetX = 0;
+
+    // Scene 2 vars
+    let scene2Substate = 'SELECTING'; // 'SELECTING', 'PRAISING'
+    let drinksYOffset = 800; 
+    let selectedDrinkIndex = -1;
+    let drinksFadingDown = false;
+    let hoverDrinkIndex = -1;
+
+    // Button states
+    let isNextBtnPressed = false;
+
+    // Minigame variables
+    let shakerPos = { x: 720, y: 1152, vx: 5, vy: 5, angle: 0, vr: 0.02 };
+    let starPos = { x: 720, y: 1152, angle: 0, scale: 1 };
+    let starMinScale = 0.1;
+    let starShrinkRate = 0.005;
+    let starsCaught = 0;
+    let targetStars = 10;
+    let starActive = false;
+
+    // Input state
+    let pointerPos = { x: -1000, y: -1000 };
+    let isPointerDown = false;
+
+    function preloadAssets() {
+        for (let key in ASSETS_URLS) {
+            let img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.src = ASSETS_URLS[key];
+            img.onload = () => {
+                imagesLoadedCount++;
+                if (imagesLoadedCount === totalImages) {
+                    initGame();
+                }
+            };
+            img.onerror = () => {
+                img.crossOrigin = null;
+                imagesLoadedCount++;
+                if (imagesLoadedCount === totalImages) {
+                    initGame();
+                }
+            };
+            loadedImages[key] = img;
+        }
+    }
+
+    function resizeCanvas() {
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        const targetAspect = TARGET_WIDTH / TARGET_HEIGHT;
+        const windowAspect = windowWidth / windowHeight;
+
+        if (windowAspect < targetAspect) {
+            canvas.width = windowWidth;
+            canvas.height = windowWidth / targetAspect;
+        } else {
+            canvas.height = windowHeight;
+            canvas.width = windowHeight * targetAspect;
+        }
+
+        scale = canvas.width / TARGET_WIDTH;
+        const rect = canvas.getBoundingClientRect();
+        canvasBounds = {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
+        };
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    function getCanvasCoords(e) {
+        let clientX = e.clientX;
+        let clientY = e.clientY;
+
+        if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const x = (clientX - rect.left) / scale;
+        const y = (clientY - rect.top) / scale;
+        return { x, y };
+    }
+
+    function initGame() {
+        resizeCanvas();
+        setupInput();
+        startLevel(1);
+        requestAnimationFrame(gameLoop);
+    }
+
+    function startLevel(lvl) {
+        currentLevel = lvl;
+        currentScene = 'SCENE_ONE';
+        fadeOpacity = 1;
+        fadeTarget = 0;
+
+        customerOffsetX = TARGET_WIDTH;
+        customerTargetOffsetX = 0;
+
+        if (currentLevel === 1) targetStars = 10;
+        else if (currentLevel === 2) targetStars = 15;
+        else if (currentLevel === 3) targetStars = 20;
+
+        scene2Substate = 'SELECTING';
+        drinksYOffset = 800;
+        drinksFadingDown = false;
+        selectedDrinkIndex = -1;
+    }
+
+    function startFade(target, speed, onComplete) {
+        fadeTarget = target;
+        fadeSpeed = speed || 0.02;
+        onFadeComplete = onComplete;
+    }
+
+    function updateFade() {
+        if (fadeOpacity < fadeTarget) {
+            fadeOpacity += fadeSpeed;
+            if (fadeOpacity >= fadeTarget) {
+                fadeOpacity = fadeTarget;
+                if (onFadeComplete) {
+                    let cb = onFadeComplete;
+                    onFadeComplete = null;
+                    cb();
+                }
+            }
+        } else if (fadeOpacity > fadeTarget) {
+            fadeOpacity -= fadeSpeed;
+            if (fadeOpacity <= fadeTarget) {
+                fadeOpacity = fadeTarget;
+                if (onFadeComplete) {
+                    let cb = onFadeComplete;
+                    onFadeComplete = null;
+                    cb();
+                }
+            }
+        }
+    }
+
+    function setupInput() {
+        const handlePointerMove = (e) => {
+            pointerPos = getCanvasCoords(e);
+        };
+
+        const handlePointerDown = (e) => {
+            isPointerDown = true;
+            pointerPos = getCanvasCoords(e);
+            handleTap(pointerPos.x, pointerPos.y);
+        };
+
+        const handlePointerUp = (e) => {
+            isPointerDown = false;
+        };
+
+        canvas.addEventListener('mousemove', handlePointerMove);
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mouseup', handlePointerUp);
+
+        canvas.addEventListener('touchstart', (e) => {
+            handlePointerDown(e);
+        }, { passive: false });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            handlePointerMove(e);
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', handlePointerUp);
+    }
+
+    function handleTap(x, y) {
+        if (fadeOpacity > 0.3) return;
+
+        if (currentScene === 'SCENE_ONE') {
+            startFade(1, 0.03, () => {
+                currentScene = 'SCENE_TWO';
+                scene2Substate = 'SELECTING';
+                drinksYOffset = 800;
+                drinksFadingDown = false;
+                startFade(0, 0.03);
+            });
+        } 
+        else if (currentScene === 'SCENE_TWO') {
+            if (scene2Substate === 'SELECTING' && drinksYOffset <= 10 && !drinksFadingDown) {
+                const centers = [360, 720, 1080];
+                const drinkImg = loadedImages.drink1;
+                const dW = drinkImg.naturalWidth || 300;
+                const dH = drinkImg.naturalHeight || 450;
+                const drinkY = 1600;
+
+                for (let i = 0; i < 3; i++) {
+                    let dx = centers[i];
+                    if (x >= dx - dW/2 && x <= dx + dW/2 &&
+                        y >= drinkY - dH/2 && y <= drinkY + dH/2) {
+                        
+                        selectedDrinkIndex = i;
+                        drinksFadingDown = true;
+                        break;
+                    }
+                }
+            } 
+            else if (scene2Substate === 'PRAISING') {
+                const btnImg = loadedImages.arrowButton;
+                const btnW = btnImg.naturalWidth || 200;
+                const btnH = btnImg.naturalHeight || 200;
+                const btnX = 720;
+                const btnY = 1950;
+
+                let dist = Math.hypot(x - btnX, y - btnY);
+                if (dist < Math.max(btnW, btnH) / 2) {
+                    isNextBtnPressed = true;
+                    setTimeout(() => {
+                        isNextBtnPressed = false;
+                        startFade(1, 0.03, () => {
+                            currentScene = 'HOW_TO_PLAY';
+                            startFade(0, 0.03);
+                        });
+                    }, 150);
+                }
+            }
+        }
+        else if (currentScene === 'HOW_TO_PLAY') {
+            const btnImg = loadedImages.arrowButton;
+            const btnW = btnImg.naturalWidth || 200;
+            const btnH = btnImg.naturalHeight || 200;
+            const btnX = 720;
+            const btnY = 1900;
+
+            let dist = Math.hypot(x - btnX, y - btnY);
+            if (dist < Math.max(btnW, btnH) / 2) {
+                isNextBtnPressed = true;
+                setTimeout(() => {
+                    isNextBtnPressed = false;
+                    startFade(1, 0.03, () => {
+                        initMinigame();
+                        currentScene = 'MINIGAME';
+                        startFade(0, 0.03);
+                    });
+                }, 150);
+            }
+        }
+        else if (currentScene === 'MINIGAME') {
+            if (starActive) {
+                const starImg = loadedImages.star;
+                const baseSize = Math.max(starImg.naturalWidth || 200, starImg.naturalHeight || 200);
+                const starRadius = (baseSize / 2) * starPos.scale;
+                let dist = Math.hypot(x - starPos.x, y - starPos.y);
+
+                if (dist < starRadius + 40) { 
+                    starsCaught++;
+                    if (starsCaught >= targetStars) {
+                        currentScene = 'WIN';
+                    } else {
+                        respawnStar();
+                    }
+                }
+            }
+        }
+        else if (currentScene === 'WIN') {
+            const btnImg = loadedImages.arrowButton;
+            const btnW = btnImg.naturalWidth || 200;
+            const btnH = btnImg.naturalHeight || 200;
+            const btnX = 720;
+            const btnY = 1750;
+
+            let dist = Math.hypot(x - btnX, y - btnY);
+            if (dist < Math.max(btnW, btnH) / 2) {
+                isNextBtnPressed = true;
+                setTimeout(() => {
+                    isNextBtnPressed = false;
+                    if (currentLevel < 3) {
+                        startLevel(currentLevel + 1);
+                    } else {
+                        startLevel(1);
+                    }
+                }, 150);
+            }
+        }
+        else if (currentScene === 'LOSE') {
+            const btnImg = loadedImages.replayButton;
+            const btnW = btnImg.naturalWidth || 200;
+            const btnH = btnImg.naturalHeight || 200;
+            const btnX = 720;
+            const btnY = 1750;
+
+            let dist = Math.hypot(x - btnX, y - btnY);
+            if (dist < Math.max(btnW, btnH) / 2) {
+                isNextBtnPressed = true;
+                setTimeout(() => {
+                    isNextBtnPressed = false;
+                    initMinigame();
+                    currentScene = 'MINIGAME';
+                }, 150);
+            }
+        }
+    }
+
+    function initMinigame() {
+        starsCaught = 0;
+        
+        let baseSpeed = 4 + currentLevel * 3;
+        shakerPos = {
+            x: 720,
+            y: 1000,
+            vx: (Math.random() > 0.5 ? 1 : -1) * baseSpeed,
+            vy: (Math.random() > 0.5 ? 1 : -1) * (baseSpeed * 0.8),
+            angle: 0,
+            vr: 0.03 + currentLevel * 0.015
+        };
+
+        starShrinkRate = 0.0035 + (currentLevel * 0.0012);
+        respawnStar();
+    }
+
+    function respawnStar() {
+        starActive = true;
+        starPos.x = shakerPos.x;
+        starPos.y = shakerPos.y;
+        starPos.angle = Math.random() * Math.PI * 2;
+        starPos.scale = 1.0;
+    }
+
+    function updateGameLogic() {
+        time += 0.03;
+
+        if (currentScene === 'SCENE_ONE') {
+            customerOffsetX += (customerTargetOffsetX - customerOffsetX) * 0.05;
+        }
+
+        if (currentScene === 'SCENE_TWO') {
+            if (scene2Substate === 'SELECTING') {
+                if (!drinksFadingDown) {
+                    if (drinksYOffset > 0) {
+                        drinksYOffset -= 30;
+                        if (drinksYOffset < 0) drinksYOffset = 0;
+                    }
+                } else {
+                    drinksYOffset += 35;
+                    if (drinksYOffset >= 800) {
+                        scene2Substate = 'PRAISING';
+                    }
+                }
+
+                // Hover check
+                const centers = [360, 720, 1080];
+                const drinkImg = loadedImages.drink1;
+                const dW = drinkImg.naturalWidth || 300;
+                const dH = drinkImg.naturalHeight || 450;
+                const drinkY = 1600 + drinksYOffset;
+                hoverDrinkIndex = -1;
+
+                for (let i = 0; i < 3; i++) {
+                    let dx = centers[i];
+                    if (pointerPos.x >= dx - dW/2 && pointerPos.x <= dx + dW/2 &&
+                        pointerPos.y >= drinkY - dH/2 && pointerPos.y <= drinkY + dH/2) {
+                        hoverDrinkIndex = i;
+                    }
+                }
+            }
+        }
+
+        if (currentScene === 'MINIGAME') {
+            shakerPos.x += shakerPos.vx;
+            shakerPos.y += shakerPos.vy;
+            shakerPos.angle += shakerPos.vr;
+
+            const margin = 150;
+            if (shakerPos.x < margin) { shakerPos.x = margin; shakerPos.vx *= -1; }
+            if (shakerPos.x > TARGET_WIDTH - margin) { shakerPos.x = TARGET_WIDTH - margin; shakerPos.vx *= -1; }
+            if (shakerPos.y < margin + 200) { shakerPos.y = margin + 200; shakerPos.vy *= -1; }
+            if (shakerPos.y > TARGET_HEIGHT - margin - 200) { shakerPos.y = TARGET_HEIGHT - margin - 200; shakerPos.vy *= -1; }
+
+            if (starActive) {
+                starPos.x += (shakerPos.x - starPos.x) * 0.08;
+                starPos.y += (shakerPos.y - starPos.y) * 0.08;
+                starPos.angle += 0.05;
+                starPos.scale -= starShrinkRate;
+
+                if (starPos.scale <= starMinScale) {
+                    starActive = false;
+                    currentScene = 'LOSE';
+                }
+            }
+        }
+
+        updateFade();
+    }
+
+    function render() {
+        ctx.save();
+        ctx.scale(scale, scale);
+        ctx.clearRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+
+        if (currentScene === 'SCENE_ONE') {
+            drawSceneOne();
+        } else if (currentScene === 'SCENE_TWO') {
+            drawSceneTwo();
+        } else if (currentScene === 'HOW_TO_PLAY') {
+            drawHowToPlay();
+        } else if (currentScene === 'MINIGAME') {
+            drawMinigame();
+        } else if (currentScene === 'WIN') {
+            drawWin();
+        } else if (currentScene === 'LOSE') {
+            drawLose();
+        }
+
+        if (fadeOpacity > 0) {
+            ctx.fillStyle = `rgba(0, 0, 0, ${fadeOpacity})`;
+            ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+        }
+
+        ctx.restore();
+    }
+
+    function drawSceneOne() {
+        // SCENE ONE - Background 1 fit to full resolution
+        drawFullFormatImage(loadedImages.bg1, 0, 0);
+
+        // Characters are pre-formatted to match the screen canvas format
+        let custImg = loadedImages.jasper;
+        if (currentLevel === 2) custImg = loadedImages.straciattella;
+        if (currentLevel === 3) custImg = loadedImages.rover;
+
+        let floatY = Math.sin(time * 0) * 0;
+
+        // Render full screen character sprite sliding in
+        drawFullFormatImage(custImg, customerOffsetX, floatY);
+
+        // Text bubble floating
+        let bubbleSway = Math.sin(time * 3) * 15;
+        drawImageCenteredOriginal(loadedImages.bubble1, 300 + customerOffsetX, 1250 + bubbleSway);
+    }
+
+    function drawSceneTwo() {
+        // SCENE TWO - Background 2
+        drawFullFormatImage(loadedImages.bg2, 0, 0);
+
+        let pwImg = loadedImages.pinkWhitney1;
+        if (scene2Substate === 'SELECTING') {
+            pwImg = loadedImages.pinkWhitney2;
+        } else if (scene2Substate === 'PRAISING') {
+            pwImg = loadedImages.pinkWhitney3;
+        }
+
+        // Full screen Pink Whitney character sprite
+        drawFullFormatImage(pwImg, 0, 0);
+
+        if (scene2Substate === 'SELECTING') {
+            let bubbleSway = Math.sin(time * 3) * 10;
+            drawImageCenteredOriginal(loadedImages.bubble2, 700, 1150 + bubbleSway);
+
+            const centers = [360, 720, 1080];
+            const drinkImgs = [loadedImages.drink1, loadedImages.drink2, loadedImages.drink3];
+
+            for (let i = 0; i < 3; i++) {
+                let wobbleAngle = 0;
+                if (hoverDrinkIndex === i) {
+                    wobbleAngle = Math.sin(time * 15) * 0.12;
+                }
+
+                ctx.save();
+                let dx = centers[i];
+                let dy = 1600 + drinksYOffset;
+                ctx.translate(dx, dy);
+                ctx.rotate(wobbleAngle);
+                drawImageCenteredOriginal(drinkImgs[i], 0, 0);
+                ctx.restore();
+            }
+        } else if (scene2Substate === 'PRAISING') {
+            let bubbleSway = Math.sin(time * 2.5) * 6;
+            drawImageCenteredOriginal(loadedImages.bubble3, 700, 1150 + bubbleSway);
+
+            let btnScale = isNextBtnPressed ? 0.9 : 1.0;
+            ctx.save();
+            ctx.translate(720, 1950);
+            ctx.scale(btnScale, btnScale);
+            drawImageCenteredOriginal(loadedImages.arrowButton, 0, 0);
+            ctx.restore();
+        }
+    }
+
+    function drawHowToPlay() {
+        // SCENE THREE - Background 3
+        drawFullFormatImage(loadedImages.bg3, 0, 0);
+
+        let htpImg = loadedImages.howToPlay1;
+        if (currentLevel === 2) htpImg = loadedImages.howToPlay2;
+        if (currentLevel === 3) htpImg = loadedImages.howToPlay3;
+
+        drawImageCenteredOriginal(htpImg, 720, 1200);
+
+        let pulse = 1.0 + Math.sin(time * 4) * 0.08;
+        if (isNextBtnPressed) pulse = 0.85;
+
+        ctx.save();
+        ctx.translate(720, 1900);
+        ctx.scale(pulse, pulse);
+        drawImageCenteredOriginal(loadedImages.arrowButton, 0, 0);
+        ctx.restore();
+    }
+
+    function drawMinigame() {
+        drawFullFormatImage(loadedImages.bg3, 0, 0);
+
+        if (starActive) {
+            ctx.save();
+            ctx.translate(starPos.x, starPos.y);
+            ctx.rotate(starPos.angle);
+            ctx.scale(starPos.scale, starPos.scale);
+            drawImageCenteredOriginal(loadedImages.star, 0, 0);
+            ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(shakerPos.x, shakerPos.y);
+        ctx.rotate(shakerPos.angle);
+        drawImageCenteredOriginal(loadedImages.shaker, 0, 0);
+        ctx.restore();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 55px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+        ctx.shadowBlur = 10;
+        ctx.fillText(`Stars: ${starsCaught} / ${targetStars}`, 720, 180);
+        ctx.shadowBlur = 0;
+    }
+
+    function drawWin() {
+        drawFullFormatImage(loadedImages.bg3, 0, 0);
+
+        let floatY = Math.sin(time * 3) * 20;
+        drawImageCenteredOriginal(loadedImages.yay, 720, 950 + floatY);
+
+        let btnScale = isNextBtnPressed ? 0.9 : 1.0;
+        ctx.save();
+        ctx.translate(720, 1750);
+        ctx.scale(btnScale, btnScale);
+        drawImageCenteredOriginal(loadedImages.arrowButton, 0, 0);
+        ctx.restore();
+    }
+
+    function drawLose() {
+        drawFullFormatImage(loadedImages.bg3, 0, 0);
+
+        let floatY = Math.sin(time * 3) * 15;
+        drawImageCenteredOriginal(loadedImages.oh, 720, 950 + floatY);
+
+        let btnScale = isNextBtnPressed ? 0.9 : 1.0;
+        ctx.save();
+        ctx.translate(720, 1750);
+        ctx.scale(btnScale, btnScale);
+        drawImageCenteredOriginal(loadedImages.replayButton, 0, 0);
+        ctx.restore();
+    }
+
+    // Full screen canvas-format images (Backgrounds & Full Character overlays)
+    function drawFullFormatImage(img, offsetX, offsetY) {
+        if (!img) return;
+        ctx.drawImage(img, offsetX, offsetY, TARGET_WIDTH, TARGET_HEIGHT);
+    }
+
+    // UI elements centered around their native dimensions
+    function drawImageCenteredOriginal(img, x, y) {
+        if (!img) return;
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        ctx.drawImage(img, x - w / 2, y - h / 2);
+    }
+
+    // Main Loop
+    function gameLoop() {
+        updateGameLogic();
+        render();
+        requestAnimationFrame(gameLoop);
+    }
+
+    preloadAssets();
+
+</script>
+</body>
+</html>
+
+```
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bartender Adventure & Mini-Game</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #0b0b12;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 100vw;
+            max-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #000;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    // --- ASSETS MANIFEST ---
+    const ASSETS_URLS = {
+        bg1: "https://file.garden/akf8FgyB_k4lPnFb/background%201",
+        bg2: "https://file.garden/akf8FgyB_k4lPnFb/Background%202",
+        bg3: "https://file.garden/akf8FgyB_k4lPnFb/Background%203",
+        jasper: "https://file.garden/akf8FgyB_k4lPnFb/Jasper%20Agate",
+        straciattella: "https://file.garden/akf8FgyB_k4lPnFb/Straciattella",
+        rover: "https://file.garden/akf8FgyB_k4lPnFb/Rover%20The%20Raver",
+        pinkWhitney1: "https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney%20say",
+        pinkWhitney2: "https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney",
+        pinkWhitney3: "https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney%20say2",
+        bubble1: "https://file.garden/akf8FgyB_k4lPnFb/request",
+        bubble2: "https://file.garden/akf8FgyB_k4lPnFb/Pick%20a%20drink!",
+        bubble3: "https://file.garden/akf8FgyB_k4lPnFb/Good%20choise!",
+        drink1: "https://file.garden/akf8FgyB_k4lPnFb/Drink%201",
+        drink2: "https://file.garden/akf8FgyB_k4lPnFb/Drink%202",
+        drink3: "https://file.garden/akf8FgyB_k4lPnFb/Drink3",
+        howToPlay1: "https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%201",
+        howToPlay2: "https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%202",
+        howToPlay3: "https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%203",
+        arrowButton: "https://file.garden/akf8FgyB_k4lPnFb/Next%20button",
+        shaker: "https://file.garden/akf8FgyB_k4lPnFb/Illustration67%20(13).png",
+        star: "https://file.garden/akf8FgyB_k4lPnFb/Illustration67%20(14).png",
+        yay: "https://file.garden/akf8FgyB_k4lPnFb/Happy%20end",
+        oh: "https://file.garden/akf8FgyB_k4lPnFb/Oh",
+        replayButton: "https://file.garden/akf8FgyB_k4lPnFb/Replay%20button"
+    };
+
+    const TARGET_WIDTH = 1440;
+    const TARGET_HEIGHT = 2304;
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let scale = 1;
+    let canvasBounds = { left: 0, top: 0, width: 1440, height: 2304 };
+
+    // Game state variables
+    let currentLevel = 1; // Level 1 -> Level 2 -> Level 3
+    let currentScene = 'SCENE_ONE'; 
+
+    let loadedImages = {};
+    let imagesLoadedCount = 0;
+    const totalImages = Object.keys(ASSETS_URLS).length;
+
+    // Transition & Animation variables
+    let fadeOpacity = 1; 
+    let fadeTarget = 0; 
+    let fadeSpeed = 0.02;
+    let onFadeComplete = null;
+
+    let time = 0; 
+
+    // Scene 1 vars
+    let customerOffsetX = TARGET_WIDTH; // Floats in from right to left (0 = perfectly aligned in screen)
+    let customerTargetOffsetX = 0;
+
+    // Scene 2 vars
+    let scene2Substate = 'SELECTING'; // 'SELECTING', 'PRAISING'
+    let drinksYOffset = 800; 
+    let selectedDrinkIndex = -1;
+    let drinksFadingDown = false;
+    let hoverDrinkIndex = -1;
+
+    // Button states
+    let isNextBtnPressed = false;
+
+    // Minigame variables
+    let shakerPos = { x: 720, y: 1152, vx: 5, vy: 5, angle: 0, vr: 0.02 };
+    let starPos = { x: 720, y: 1152, angle: 0, scale: 1 };
+    let starMinScale = 0.1;
+    let starShrinkRate = 0.005;
+    let starsCaught = 0;
+    let targetStars = 10;
+    let starActive = false;
+
+    // Input state
+    let pointerPos = { x: -1000, y: -1000 };
+    let isPointerDown = false;
+
+    function preloadAssets() {
+        for (let key in ASSETS_URLS) {
+            let img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.src = ASSETS_URLS[key];
+            img.onload = () => {
+                imagesLoadedCount++;
+                if (imagesLoadedCount === totalImages) {
+                    initGame();
+                }
+            };
+            img.onerror = () => {
+                img.crossOrigin = null;
+                imagesLoadedCount++;
+                if (imagesLoadedCount === totalImages) {
+                    initGame();
+                }
+            };
+            loadedImages[key] = img;
+        }
+    }
+
+    function resizeCanvas() {
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        const targetAspect = TARGET_WIDTH / TARGET_HEIGHT;
+        const windowAspect = windowWidth / windowHeight;
+
+        if (windowAspect < targetAspect) {
+            canvas.width = windowWidth;
+            canvas.height = windowWidth / targetAspect;
+        } else {
+            canvas.height = windowHeight;
+            canvas.width = windowHeight * targetAspect;
+        }
+
+        scale = canvas.width / TARGET_WIDTH;
+        const rect = canvas.getBoundingClientRect();
+        canvasBounds = {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
+        };
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    function getCanvasCoords(e) {
+        let clientX = e.clientX;
+        let clientY = e.clientY;
+
+        if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const x = (clientX - rect.left) / scale;
+        const y = (clientY - rect.top) / scale;
+        return { x, y };
+    }
+
+    function initGame() {
+        resizeCanvas();
+        setupInput();
+        startLevel(1);
+        requestAnimationFrame(gameLoop);
+    }
+
+    function startLevel(lvl) {
+        currentLevel = lvl;
+        currentScene = 'SCENE_ONE';
+        fadeOpacity = 1;
+        fadeTarget = 0;
+
+        customerOffsetX = TARGET_WIDTH;
+        customerTargetOffsetX = 0;
+
+        if (currentLevel === 1) targetStars = 10;
+        else if (currentLevel === 2) targetStars = 15;
+        else if (currentLevel === 3) targetStars = 20;
+
+        scene2Substate = 'SELECTING';
+        drinksYOffset = 800;
+        drinksFadingDown = false;
+        selectedDrinkIndex = -1;
+    }
+
+    function startFade(target, speed, onComplete) {
+        fadeTarget = target;
+        fadeSpeed = speed || 0.02;
+        onFadeComplete = onComplete;
+    }
+
+    function updateFade() {
+        if (fadeOpacity < fadeTarget) {
+            fadeOpacity += fadeSpeed;
+            if (fadeOpacity >= fadeTarget) {
+                fadeOpacity = fadeTarget;
+                if (onFadeComplete) {
+                    let cb = onFadeComplete;
+                    onFadeComplete = null;
+                    cb();
+                }
+            }
+        } else if (fadeOpacity > fadeTarget) {
+            fadeOpacity -= fadeSpeed;
+            if (fadeOpacity <= fadeTarget) {
+                fadeOpacity = fadeTarget;
+                if (onFadeComplete) {
+                    let cb = onFadeComplete;
+                    onFadeComplete = null;
+                    cb();
+                }
+            }
+        }
+    }
+
+    function setupInput() {
+        const handlePointerMove = (e) => {
+            pointerPos = getCanvasCoords(e);
+        };
+
+        const handlePointerDown = (e) => {
+            isPointerDown = true;
+            pointerPos = getCanvasCoords(e);
+            handleTap(pointerPos.x, pointerPos.y);
+        };
+
+        const handlePointerUp = (e) => {
+            isPointerDown = false;
+        };
+
+        canvas.addEventListener('mousemove', handlePointerMove);
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mouseup', handlePointerUp);
+
+        canvas.addEventListener('touchstart', (e) => {
+            handlePointerDown(e);
+        }, { passive: false });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            handlePointerMove(e);
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', handlePointerUp);
+    }
+
+    function handleTap(x, y) {
+        if (fadeOpacity > 0.3) return;
+
+        if (currentScene === 'SCENE_ONE') {
+            startFade(1, 0.03, () => {
+                currentScene = 'SCENE_TWO';
+                scene2Substate = 'SELECTING';
+                drinksYOffset = 800;
+                drinksFadingDown = false;
+                startFade(0, 0.03);
+            });
+        } 
+        else if (currentScene === 'SCENE_TWO') {
+            if (scene2Substate === 'SELECTING' && drinksYOffset <= 10 && !drinksFadingDown) {
+                const centers = [360, 720, 1080];
+                const drinkImg = loadedImages.drink1;
+                const dW = drinkImg.naturalWidth || 300;
+                const dH = drinkImg.naturalHeight || 450;
+                const drinkY = 1600;
+
+                for (let i = 0; i < 3; i++) {
+                    let dx = centers[i];
+                    if (x >= dx - dW/2 && x <= dx + dW/2 &&
+                        y >= drinkY - dH/2 && y <= drinkY + dH/2) {
+                        
+                        selectedDrinkIndex = i;
+                        drinksFadingDown = true;
+                        break;
+                    }
+                }
+            } 
+            else if (scene2Substate === 'PRAISING') {
+                const btnImg = loadedImages.arrowButton;
+                const btnW = btnImg.naturalWidth || 200;
+                const btnH = btnImg.naturalHeight || 200;
+                const btnX = 720;
+                const btnY = 1950;
+
+                let dist = Math.hypot(x - btnX, y - btnY);
+                if (dist < Math.max(btnW, btnH) / 2) {
+                    isNextBtnPressed = true;
+                    setTimeout(() => {
+                        isNextBtnPressed = false;
+                        startFade(1, 0.03, () => {
+                            currentScene = 'HOW_TO_PLAY';
+                            startFade(0, 0.03);
+                        });
+                    }, 150);
+                }
+            }
+        }
+        else if (currentScene === 'HOW_TO_PLAY') {
+            const btnImg = loadedImages.arrowButton;
+            const btnW = btnImg.naturalWidth || 200;
+            const btnH = btnImg.naturalHeight || 200;
+            const btnX = 720;
+            const btnY = 1900;
+
+            let dist = Math.hypot(x - btnX, y - btnY);
+            if (dist < Math.max(btnW, btnH) / 2) {
+                isNextBtnPressed = true;
+                setTimeout(() => {
+                    isNextBtnPressed = false;
+                    startFade(1, 0.03, () => {
+                        initMinigame();
+                        currentScene = 'MINIGAME';
+                        startFade(0, 0.03);
+                    });
+                }, 150);
+            }
+        }
+        else if (currentScene === 'MINIGAME') {
+            if (starActive) {
+                const starImg = loadedImages.star;
+                const baseSize = Math.max(starImg.naturalWidth || 200, starImg.naturalHeight || 200);
+                const starRadius = (baseSize / 2) * starPos.scale;
+                let dist = Math.hypot(x - starPos.x, y - starPos.y);
+
+                if (dist < starRadius + 40) { 
+                    starsCaught++;
+                    if (starsCaught >= targetStars) {
+                        currentScene = 'WIN';
+                    } else {
+                        respawnStar();
+                    }
+                }
+            }
+        }
+        else if (currentScene === 'WIN') {
+            const btnImg = loadedImages.arrowButton;
+            const btnW = btnImg.naturalWidth || 200;
+            const btnH = btnImg.naturalHeight || 200;
+            const btnX = 720;
+            const btnY = 1750;
+
+            let dist = Math.hypot(x - btnX, y - btnY);
+            if (dist < Math.max(btnW, btnH) / 2) {
+                isNextBtnPressed = true;
+                setTimeout(() => {
+                    isNextBtnPressed = false;
+                    if (currentLevel < 3) {
+                        startLevel(currentLevel + 1);
+                    } else {
+                        startLevel(1);
+                    }
+                }, 150);
+            }
+        }
+        else if (currentScene === 'LOSE') {
+            const btnImg = loadedImages.replayButton;
+            const btnW = btnImg.naturalWidth || 200;
+            const btnH = btnImg.naturalHeight || 200;
+            const btnX = 720;
+            const btnY = 1750;
+
+            let dist = Math.hypot(x - btnX, y - btnY);
+            if (dist < Math.max(btnW, btnH) / 2) {
+                isNextBtnPressed = true;
+                setTimeout(() => {
+                    isNextBtnPressed = false;
+                    initMinigame();
+                    currentScene = 'MINIGAME';
+                }, 150);
+            }
+        }
+    }
+
+    function initMinigame() {
+        starsCaught = 0;
+        
+        let baseSpeed = 4 + currentLevel * 3;
+        shakerPos = {
+            x: 720,
+            y: 1000,
+            vx: (Math.random() > 0.5 ? 1 : -1) * baseSpeed,
+            vy: (Math.random() > 0.5 ? 1 : -1) * (baseSpeed * 0.8),
+            angle: 0,
+            vr: 0.03 + currentLevel * 0.015
+        };
+
+        starShrinkRate = 0.0035 + (currentLevel * 0.0012);
+        respawnStar();
+    }
+
+    function respawnStar() {
+        starActive = true;
+        starPos.x = shakerPos.x;
+        starPos.y = shakerPos.y;
+        starPos.angle = Math.random() * Math.PI * 2;
+        starPos.scale = 1.0;
+    }
+
+    function updateGameLogic() {
+        time += 0.03;
+
+        if (currentScene === 'SCENE_ONE') {
+            customerOffsetX += (customerTargetOffsetX - customerOffsetX) * 0.05;
+        }
+
+        if (currentScene === 'SCENE_TWO') {
+            if (scene2Substate === 'SELECTING') {
+                if (!drinksFadingDown) {
+                    if (drinksYOffset > 0) {
+                        drinksYOffset -= 30;
+                        if (drinksYOffset < 0) drinksYOffset = 0;
+                    }
+                } else {
+                    drinksYOffset += 35;
+                    if (drinksYOffset >= 800) {
+                        scene2Substate = 'PRAISING';
+                    }
+                }
+
+                // Hover check
+                const centers = [360, 720, 1080];
+                const drinkImg = loadedImages.drink1;
+                const dW = drinkImg.naturalWidth || 300;
+                const dH = drinkImg.naturalHeight || 450;
+                const drinkY = 1600 + drinksYOffset;
+                hoverDrinkIndex = -1;
+
+                for (let i = 0; i < 3; i++) {
+                    let dx = centers[i];
+                    if (pointerPos.x >= dx - dW/2 && pointerPos.x <= dx + dW/2 &&
+                        pointerPos.y >= drinkY - dH/2 && pointerPos.y <= drinkY + dH/2) {
+                        hoverDrinkIndex = i;
+                    }
+                }
+            }
+        }
+
+        if (currentScene === 'MINIGAME') {
+            shakerPos.x += shakerPos.vx;
+            shakerPos.y += shakerPos.vy;
+            shakerPos.angle += shakerPos.vr;
+
+            const margin = 150;
+            if (shakerPos.x < margin) { shakerPos.x = margin; shakerPos.vx *= -1; }
+            if (shakerPos.x > TARGET_WIDTH - margin) { shakerPos.x = TARGET_WIDTH - margin; shakerPos.vx *= -1; }
+            if (shakerPos.y < margin + 200) { shakerPos.y = margin + 200; shakerPos.vy *= -1; }
+            if (shakerPos.y > TARGET_HEIGHT - margin - 200) { shakerPos.y = TARGET_HEIGHT - margin - 200; shakerPos.vy *= -1; }
+
+            if (starActive) {
+                starPos.x += (shakerPos.x - starPos.x) * 0.08;
+                starPos.y += (shakerPos.y - starPos.y) * 0.08;
+                starPos.angle += 0.05;
+                starPos.scale -= starShrinkRate;
+
+                if (starPos.scale <= starMinScale) {
+                    starActive = false;
+                    currentScene = 'LOSE';
+                }
+            }
+        }
+
+        updateFade();
+    }
+
+    function render() {
+        ctx.save();
+        ctx.scale(scale, scale);
+        ctx.clearRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+
+        if (currentScene === 'SCENE_ONE') {
+            drawSceneOne();
+        } else if (currentScene === 'SCENE_TWO') {
+            drawSceneTwo();
+        } else if (currentScene === 'HOW_TO_PLAY') {
+            drawHowToPlay();
+        } else if (currentScene === 'MINIGAME') {
+            drawMinigame();
+        } else if (currentScene === 'WIN') {
+            drawWin();
+        } else if (currentScene === 'LOSE') {
+            drawLose();
+        }
+
+        if (fadeOpacity > 0) {
+            ctx.fillStyle = `rgba(0, 0, 0, ${fadeOpacity})`;
+            ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+        }
+
+        ctx.restore();
+    }
+
+    function drawSceneOne() {
+        // SCENE ONE - Background 1 fit to full resolution
+        drawFullFormatImage(loadedImages.bg1, 0, 0);
+
+        // Characters are pre-formatted to match the screen canvas format
+        let custImg = loadedImages.jasper;
+        if (currentLevel === 2) custImg = loadedImages.straciattella;
+        if (currentLevel === 3) custImg = loadedImages.rover;
+
+        let floatY = Math.sin(time * 3) * 15;
+
+        // Render full screen character sprite sliding in
+        drawFullFormatImage(custImg, customerOffsetX, floatY);
+
+        // Text bubble floating
+        let bubbleSway = Math.sin(time * 2) * 8;
+        drawImageCenteredOriginal(loadedImages.bubble1, 850 + customerOffsetX, 500 + bubbleSway);
+    }
+
+    function drawSceneTwo() {
+        // SCENE TWO - Background 2
+        drawFullFormatImage(loadedImages.bg2, 0, 0);
+
+        let pwImg = loadedImages.pinkWhitney1;
+        if (scene2Substate === 'SELECTING') {
+            pwImg = loadedImages.pinkWhitney2;
+        } else if (scene2Substate === 'PRAISING') {
+            pwImg = loadedImages.pinkWhitney3;
+        }
+
+        // Full screen Pink Whitney character sprite
+        drawFullFormatImage(pwImg, 0, 0);
+
+        if (scene2Substate === 'SELECTING') {
+            let bubbleSway = Math.sin(time * 2.5) * 6;
+            drawImageCenteredOriginal(loadedImages.bubble2, 900, 500 + bubbleSway);
+
+            const centers = [360, 720, 1080];
+            const drinkImgs = [loadedImages.drink1, loadedImages.drink2, loadedImages.drink3];
+
+            for (let i = 0; i < 3; i++) {
+                let wobbleAngle = 0;
+                if (hoverDrinkIndex === i) {
+                    wobbleAngle = Math.sin(time * 15) * 0.12;
+                }
+
+                ctx.save();
+                let dx = centers[i];
+                let dy = 1600 + drinksYOffset;
+                ctx.translate(dx, dy);
+                ctx.rotate(wobbleAngle);
+                drawImageCenteredOriginal(drinkImgs[i], 0, 0);
+                ctx.restore();
+            }
+        } else if (scene2Substate === 'PRAISING') {
+            let bubbleSway = Math.sin(time * 2.5) * 6;
+            drawImageCenteredOriginal(loadedImages.bubble3, 900, 500 + bubbleSway);
+
+            let btnScale = isNextBtnPressed ? 0.9 : 1.0;
+            ctx.save();
+            ctx.translate(720, 1950);
+            ctx.scale(btnScale, btnScale);
+            drawImageCenteredOriginal(loadedImages.arrowButton, 0, 0);
+            ctx.restore();
+        }
+    }
+
+    function drawHowToPlay() {
+        // SCENE THREE - Background 3
+        drawFullFormatImage(loadedImages.bg3, 0, 0);
+
+        let htpImg = loadedImages.howToPlay1;
+        if (currentLevel === 2) htpImg = loadedImages.howToPlay2;
+        if (currentLevel === 3) htpImg = loadedImages.howToPlay3;
+
+        drawImageCenteredOriginal(htpImg, 720, 1000);
+
+        let pulse = 1.0 + Math.sin(time * 4) * 0.08;
+        if (isNextBtnPressed) pulse = 0.85;
+
+        ctx.save();
+        ctx.translate(720, 1900);
+        ctx.scale(pulse, pulse);
+        drawImageCenteredOriginal(loadedImages.arrowButton, 0, 0);
+        ctx.restore();
+    }
+
+    function drawMinigame() {
+        drawFullFormatImage(loadedImages.bg3, 0, 0);
+
+        if (starActive) {
+            ctx.save();
+            ctx.translate(starPos.x, starPos.y);
+            ctx.rotate(starPos.angle);
+            ctx.scale(starPos.scale, starPos.scale);
+            drawImageCenteredOriginal(loadedImages.star, 0, 0);
+            ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(shakerPos.x, shakerPos.y);
+        ctx.rotate(shakerPos.angle);
+        drawImageCenteredOriginal(loadedImages.shaker, 0, 0);
+        ctx.restore();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 55px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+        ctx.shadowBlur = 10;
+        ctx.fillText(`Stars: ${starsCaught} / ${targetStars}`, 720, 180);
+        ctx.shadowBlur = 0;
+    }
+
+    function drawWin() {
+        drawFullFormatImage(loadedImages.bg3, 0, 0);
+
+        let floatY = Math.sin(time * 3) * 20;
+        drawImageCenteredOriginal(loadedImages.yay, 720, 950 + floatY);
+
+        let btnScale = isNextBtnPressed ? 0.9 : 1.0;
+        ctx.save();
+        ctx.translate(720, 1750);
+        ctx.scale(btnScale, btnScale);
+        drawImageCenteredOriginal(loadedImages.arrowButton, 0, 0);
+        ctx.restore();
+    }
+
+    function drawLose() {
+        drawFullFormatImage(loadedImages.bg3, 0, 0);
+
+        let floatY = Math.sin(time * 3) * 15;
+        drawImageCenteredOriginal(loadedImages.oh, 720, 950 + floatY);
+
+        let btnScale = isNextBtnPressed ? 0.9 : 1.0;
+        ctx.save();
+        ctx.translate(720, 1750);
+        ctx.scale(btnScale, btnScale);
+        drawImageCenteredOriginal(loadedImages.replayButton, 0, 0);
+        ctx.restore();
+    }
+
+    // Full screen canvas-format images (Backgrounds & Full Character overlays)
+    function drawFullFormatImage(img, offsetX, offsetY) {
+        if (!img) return;
+        ctx.drawImage(img, offsetX, offsetY, TARGET_WIDTH, TARGET_HEIGHT);
+    }
+
+    // UI elements centered around their native dimensions
+    function drawImageCenteredOriginal(img, x, y) {
+        if (!img) return;
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        ctx.drawImage(img, x - w / 2, y - h / 2);
+    }
+
+    // Main Loop
+    function gameLoop() {
+        updateGameLogic();
+        render();
+        requestAnimationFrame(gameLoop);
+    }
+
+    preloadAssets();
+
+</script>
+</body>
+</html>
