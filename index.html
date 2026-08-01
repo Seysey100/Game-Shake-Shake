@@ -1,0 +1,681 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shake Shake Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            overflow: hidden;
+            touch-action: none; /* Prevent scroll on touch */
+            font-family: sans-serif;
+        }
+
+        #game-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 1440px;
+            height: 2304px;
+            transform-origin: center center;
+            background-color: #000;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+
+        img {
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        /* Custom Animations */
+        @keyframes sway {
+            0%, 100% { transform: rotate(-3deg) translateY(0); }
+            50% { transform: rotate(3deg) translateY(-10px); }
+        }
+        .animate-sway {
+            animation: sway 3s ease-in-out infinite;
+        }
+
+        @keyframes float-left {
+            from { transform: translateX(300px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-float-left {
+            animation: float-left 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        @keyframes slide-up {
+            from { transform: translateY(400px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-up {
+            animation: slide-up 1s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        @keyframes slide-down {
+            from { transform: translateY(0); opacity: 1; }
+            to { transform: translateY(400px); opacity: 0; }
+        }
+        .animate-slide-down {
+            animation: slide-down 0.8s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+        }
+
+        @keyframes wobble {
+            0% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(-5deg) scale(1.05); }
+            50% { transform: rotate(5deg) scale(1.05); }
+            75% { transform: rotate(-5deg) scale(1.05); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+        .hover-wobble:hover {
+            animation: wobble 1s ease-in-out infinite;
+            cursor: pointer;
+        }
+
+        @keyframes pulse-scale {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.08); }
+        }
+        .animate-pulse-scale {
+            animation: pulse-scale 2s ease-in-out infinite;
+        }
+
+        @keyframes float-up-center {
+            from { transform: translate(-50%, 100px) scale(0.8); opacity: 0; }
+            to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        .animate-float-up-center {
+            animation: float-up-center 1s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        /* Utility Classes */
+        .sink-in:active {
+            transform: translateX(-50%) scale(0.9) !important;
+            transition: transform 0.1s ease;
+        }
+        .fade-transition {
+            transition: opacity 0.8s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="hidden fixed inset-0 bg-black flex flex-col items-center justify-center z-[9999] text-white">
+        <div class="text-4xl font-bold mb-4 animate-pulse">Loading Assets...</div>
+        <div class="text-2xl" id="loading-progress">0%</div>
+    </div>
+
+    <div id="game-container">
+        <!-- Background Layer -->
+        <div id="bg-layer" class="absolute inset-0 bg-cover bg-center fade-transition opacity-0"></div>
+
+        <!-- Scene 1 -->
+        <div id="scene1-layer" class="absolute inset-0 hidden">
+            <!-- Character injected dynamically -->
+            <img id="s1-char" src="" class="absolute bottom-[0px] left-[0px] h-[100%] object-contain opacity-0 pointer-events-none" />
+            <img id="s1-bubble" src="https://file.garden/akf8FgyB_k4lPnFb/request" class="absolute top-[45%] right-[1000px] w-[400px] opacity-0 animate-sway pointer-events-none fade-transition" />
+            <!-- Tap receiver -->
+            <div id="s1-tap-area" class="absolute inset-0 cursor-pointer"></div>
+        </div>
+
+        <!-- Scene 2 -->
+        <div id="scene2-layer" class="absolute inset-0 hidden">
+            <!-- Pink Whitney States -->
+            <img id="s2-pw" src="https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney%20say" class="absolute bottom-[100px] left-1/2 transform -translate-x-1/2 h-[90%] object-contain pointer-events-none fade-transition" />
+            
+            <!-- Bubbles -->
+            <img id="s2-bubble-req" src="https://file.garden/akf8FgyB_k4lPnFb/Pick%20a%20drink!" class="absolute top-[0%] right-[0px] w-[2000px] opacity-0 animate-sway pointer-events-none fade-transition" />
+            <img id="s2-bubble-praise" src="https://file.garden/akf8FgyB_k4lPnFb/Good%20choise!" class="absolute top-[0%] right-[0px] w-[2000px] opacity-0 animate-sway pointer-events-none fade-transition hidden" />
+            
+            <!-- Drinks -->
+            <div id="s2-drinks" class="absolute bottom-[250px] w-full flex justify-center gap-[100px] px-[100px] opacity-0 hidden">
+                <img src="https://file.garden/akf8FgyB_k4lPnFb/Drink%201" class="drink-btn w-[300px] object-contain hover-wobble transition-transform" />
+                <img src="https://file.garden/akf8FgyB_k4lPnFb/Drink%202" class="drink-btn w-[300px] object-contain hover-wobble transition-transform" />
+                <img src="https://file.garden/akf8FgyB_k4lPnFb/Drink3" class="drink-btn w-[300px] object-contain hover-wobble transition-transform" />
+            </div>
+
+            <!-- Next Button (Scene 2) -->
+            <img id="s2-next-btn" src="https://file.garden/akf8FgyB_k4lPnFb/Next%20button" class="absolute bottom-[100px] left-1/2 transform -translate-x-1/2 w-[350px] cursor-pointer animate-pulse-scale sink-in opacity-0 fade-transition hidden" />
+        </div>
+
+        <!-- Scene 3 -->
+        <div id="scene3-layer" class="absolute inset-0 hidden">
+            <img id="s3-how-to" src="" class="absolute top-[40%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[1200px] object-contain pointer-events-none" />
+            <!-- Next Button (Scene 3) -->
+            <img id="s3-start-btn" src="https://file.garden/akf8FgyB_k4lPnFb/Next%20button" class="absolute bottom-[300px] left-1/2 transform -translate-x-1/2 w-[350px] cursor-pointer animate-pulse-scale sink-in opacity-0 fade-transition" />
+        </div>
+
+        <!-- Minigame -->
+        <div id="minigame-layer" class="absolute inset-0 hidden">
+            <div id="mg-stats" class="absolute top-[50px] left-[50px] text-white text-6xl font-bold font-mono bg-black/50 p-6 rounded-3xl pointer-events-none z-50 shadow-lg border-4 border-white/20">
+                Score: <span id="mg-score">0</span> / <span id="mg-target">10</span>
+            </div>
+            
+            <img id="mg-star" src="https://file.garden/akf8FgyB_k4lPnFb/Illustration67%20(14).png" class="absolute w-[400px] h-[400px] cursor-crosshair opacity-0 fade-transition origin-center" />
+            <img id="mg-shaker" src="https://file.garden/akf8FgyB_k4lPnFb/Illustration67%20(13).png" class="absolute w-[400px] h-[600px] pointer-events-none opacity-0 fade-transition origin-centerz-40 touch-manipulation" />
+
+            <!-- Minigame Overlays -->
+            <img id="mg-yay" src="https://file.garden/akf8FgyB_k4lPnFb/Happy%20end" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[1000px] hidden z-50" />
+            <img id="mg-oh" src="https://file.garden/akf8FgyB_k4lPnFb/Oh" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[1000px] hidden z-50" />
+            
+            <img id="mg-next-btn" src="https://file.garden/akf8FgyB_k4lPnFb/Next%20button" class="absolute bottom-[200px] left-1/2 transform -translate-x-1/2 w-[350px] cursor-pointer animate-pulse-scale sink-in hidden z-50" />
+            <img id="mg-replay-btn" src="https://file.garden/akf8FgyB_k4lPnFb/Replay%20button" class="absolute bottom-[200px] left-1/2 transform -translate-x-1/2 w-[400px] cursor-pointer hover:scale-105 transition-transform active:scale-95 hidden z-50" />
+        </div>
+
+        <!-- Ending -->
+        <div id="ending-layer" class="absolute inset-0 bg-black hidden z-[800]">
+            <img src="https://file.garden/akf8FgyB_k4lPnFb/Thank%20you%20for%20your%20attention!_20260801_200550_0000.png" class="absolute inset-0 w-full h-full object-contain opacity-0 fade-transition" id="end-sprite" />
+            <div id="end-tap-area" class="absolute inset-0 cursor-pointer hidden"></div>
+        </div>
+
+        <!-- Transition Overlay -->
+        <div id="transition-overlay" class="absolute inset-0 bg-black z-[900] pointer-events-none opacity-100 fade-transition"></div>
+    </div>
+
+    <script>
+        // --- Game Scaling Logic ---
+        function resize() {
+            const container = document.getElementById('game-container');
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            
+            // Calculate scale to fit within viewport
+            const scaleX = windowWidth / 1440;
+            const scaleY = windowHeight / 2304;
+            const scale = Math.min(scaleX, scaleY);
+            
+            container.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        }
+        window.addEventListener('resize', resize);
+        resize(); // Initial resize
+
+        // --- Asset Data ---
+        const ASSETS = {
+            bgs: [
+                'https://file.garden/akf8FgyB_k4lPnFb/background%201',
+                'https://file.garden/akf8FgyB_k4lPnFb/Background%202',
+                'https://file.garden/akf8FgyB_k4lPnFb/Background%203'
+            ],
+            chars: [
+                'https://file.garden/akf8FgyB_k4lPnFb/Jasper%20Agate',
+                'https://file.garden/akf8FgyB_k4lPnFb/Straciattella',
+                'https://file.garden/akf8FgyB_k4lPnFb/Rover%20The%20Raver'
+            ],
+            pwStates: [
+                'https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney%20say',
+                'https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney',
+                'https://file.garden/akf8FgyB_k4lPnFb/Pink%20Whitney%20say2'
+            ],
+            bubbles: [
+                'https://file.garden/akf8FgyB_k4lPnFb/request',
+                'https://file.garden/akf8FgyB_k4lPnFb/Pick%20a%20drink!',
+                'https://file.garden/akf8FgyB_k4lPnFb/Good%20choise!'
+            ],
+            drinks: [
+                'https://file.garden/akf8FgyB_k4lPnFb/Drink%201',
+                'https://file.garden/akf8FgyB_k4lPnFb/Drink%202',
+                'https://file.garden/akf8FgyB_k4lPnFb/Drink3'
+            ],
+            howTos: [
+                'https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%201',
+                'https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%202',
+                'https://file.garden/akf8FgyB_k4lPnFb/How%20to%20play%203'
+            ],
+            ui: [
+                'https://file.garden/akf8FgyB_k4lPnFb/Next%20button',
+                'https://file.garden/akf8FgyB_k4lPnFb/Illustration67%20(13).png', // shaker
+                'https://file.garden/akf8FgyB_k4lPnFb/Illustration67%20(14).png', // star
+                'https://file.garden/akf8FgyB_k4lPnFb/Happy%20end',
+                'https://file.garden/akf8FgyB_k4lPnFb/Oh',
+                'https://file.garden/akf8FgyB_k4lPnFb/Replay%20button',
+                'https://file.garden/akf8FgyB_k4lPnFb/Thank%20you%20for%20your%20attention!_20260801_200550_0000.png'
+            ]
+        };
+
+        const GOALS = [10, 15, 20];
+
+        // --- Preloader ---
+        let loadedCount = 0;
+        let totalAssets = 0;
+        let imgCache = {};
+
+        function initPreload() {
+            let allUrls = [];
+            Object.values(ASSETS).forEach(arr => {
+                allUrls = allUrls.concat(arr);
+            });
+            
+            // Remove duplicates
+            allUrls = [...new Set(allUrls)];
+            totalAssets = allUrls.length;
+
+            allUrls.forEach(url => {
+                const img = new Image();
+                img.onload = () => {
+                    loadedCount++;
+                    document.getElementById('loading-progress').innerText = Math.floor((loadedCount / totalAssets) * 100) + '%';
+                    if (loadedCount === totalAssets) {
+                        setTimeout(() => {
+                            document.getElementById('loading-screen').style.display = 'none';
+                            startGame();
+                        }, 500);
+                    }
+                };
+                img.onerror = () => {
+                    // Even if one fails, continue to avoid getting stuck
+                    loadedCount++;
+                    if (loadedCount === totalAssets) {
+                        document.getElementById('loading-screen').style.display = 'none';
+                        startGame();
+                    }
+                };
+                img.src = url;
+                imgCache[url] = img;
+            });
+        }
+
+        // --- Game State ---
+        let currentLevel = 0; // 0, 1, 2
+        const UI = {
+            bgLayer: document.getElementById('bg-layer'),
+            overlay: document.getElementById('transition-overlay'),
+            layers: {
+                scene1: document.getElementById('scene1-layer'),
+                scene2: document.getElementById('scene2-layer'),
+                scene3: document.getElementById('scene3-layer'),
+                minigame: document.getElementById('minigame-layer'),
+                ending: document.getElementById('ending-layer')
+            }
+        };
+
+        function hideAllLayers() {
+            Object.values(UI.layers).forEach(el => el.classList.add('hidden'));
+        }
+
+        function fadeScreen(callback) {
+            UI.overlay.style.opacity = '1';
+            setTimeout(() => {
+                callback();
+                setTimeout(() => {
+                    UI.overlay.style.opacity = '0';
+                }, 100); // Give a tiny delay before fading back in
+            }, 800); // Transition time
+        }
+
+        function setBackground(index) {
+            UI.bgLayer.style.backgroundImage = `url('${ASSETS.bgs[index]}')`;
+            UI.bgLayer.style.opacity = '1';
+        }
+
+        // --- Flow Control ---
+
+        function startGame() {
+            currentLevel = 0;
+            UI.overlay.style.opacity = '1'; // Start black
+            setTimeout(() => {
+                playScene1();
+                UI.overlay.style.opacity = '0'; // Gradually brighten
+            }, 500);
+        }
+
+        function playScene1() {
+            hideAllLayers();
+            UI.layers.scene1.classList.remove('hidden');
+            setBackground(0);
+
+            const charImg = document.getElementById('s1-char');
+            const bubble = document.getElementById('s1-bubble');
+            const tapArea = document.getElementById('s1-tap-area');
+            
+            // Reset state
+            charImg.classList.remove('animate-float-left');
+            charImg.style.opacity = '0';
+            bubble.style.opacity = '0';
+            
+            // Setup Level Assets
+            charImg.src = ASSETS.chars[currentLevel];
+
+            // Sequence
+            setTimeout(() => {
+                charImg.classList.add('animate-float-left');
+                setTimeout(() => {
+                    bubble.style.opacity = '1';
+                    // Allow click after anims
+                    tapArea.onclick = () => {
+                        tapArea.onclick = null;
+                        playScene2();
+                    };
+                }, 1200);
+            }, 300);
+        }
+
+        function playScene2() {
+            fadeScreen(() => {
+                hideAllLayers();
+                UI.layers.scene2.classList.remove('hidden');
+                setBackground(1);
+
+                const pw = document.getElementById('s2-pw');
+                const reqBubble = document.getElementById('s2-bubble-req');
+                const praiseBubble = document.getElementById('s2-bubble-praise');
+                const drinksContainer = document.getElementById('s2-drinks');
+                const nextBtn = document.getElementById('s2-next-btn');
+
+                // Reset state
+                pw.src = ASSETS.pwStates[0];
+                reqBubble.classList.remove('hidden');
+                reqBubble.style.opacity = '0';
+                praiseBubble.classList.add('hidden');
+                praiseBubble.style.opacity = '0';
+                drinksContainer.classList.add('hidden');
+                drinksContainer.classList.remove('animate-slide-up', 'animate-slide-down');
+                drinksContainer.style.opacity = '0';
+                nextBtn.classList.add('hidden');
+                nextBtn.style.opacity = '0';
+
+                // Sequence Phase 1
+                setTimeout(() => {
+                    reqBubble.style.opacity = '1'; // Bubble appears
+                    
+                    setTimeout(() => {
+                        // Change sprite and show drinks
+                        pw.src = ASSETS.pwStates[1];
+                        drinksContainer.classList.remove('hidden');
+                        drinksContainer.classList.add('animate-slide-up');
+                        
+                        // Setup Drink clicks
+                        const drinks = document.querySelectorAll('.drink-btn');
+                        drinks.forEach(d => {
+                            d.onclick = () => handleDrinkSelect();
+                        });
+                    }, 1000);
+                }, 500);
+            });
+        }
+
+        function handleDrinkSelect() {
+            const drinksContainer = document.getElementById('s2-drinks');
+            const drinks = document.querySelectorAll('.drink-btn');
+            drinks.forEach(d => d.onclick = null); // Remove listeners
+
+            // Fade down drinks
+            drinksContainer.classList.remove('animate-slide-up');
+            drinksContainer.classList.add('animate-slide-down');
+
+            setTimeout(() => {
+                drinksContainer.classList.add('hidden');
+                
+                const pw = document.getElementById('s2-pw');
+                const reqBubble = document.getElementById('s2-bubble-req');
+                const praiseBubble = document.getElementById('s2-bubble-praise');
+                const nextBtn = document.getElementById('s2-next-btn');
+
+                pw.src = ASSETS.pwStates[2];
+                reqBubble.classList.add('hidden');
+                reqBubble.style.opacity = '0';
+                praiseBubble.classList.remove('hidden');
+                praiseBubble.style.opacity = '1';
+
+                setTimeout(() => {
+                    nextBtn.classList.remove('hidden');
+                    nextBtn.style.opacity = '1';
+                    nextBtn.onclick = () => {
+                        nextBtn.onclick = null;
+                        playScene3();
+                    };
+                }, 500);
+
+            }, 800);
+        }
+
+        function playScene3() {
+            fadeScreen(() => {
+                hideAllLayers();
+                UI.layers.scene3.classList.remove('hidden');
+                setBackground(2);
+
+                const howTo = document.getElementById('s3-how-to');
+                const startBtn = document.getElementById('s3-start-btn');
+
+                // Set image based on level
+                howTo.src = ASSETS.howTos[currentLevel];
+                startBtn.style.opacity = '1';
+                
+                startBtn.onclick = () => {
+                    startBtn.onclick = null;
+                    // Sinks in effect is handled by CSS :active, wait a tiny bit for user to see it
+                    setTimeout(() => {
+                        startMinigame();
+                    }, 150);
+                };
+            });
+        }
+
+        // --- Minigame Logic ---
+        let mgActive = false;
+        let score = 0;
+        let targetScore = 0;
+        let shakerObj = { x: 720, y: 1152, tx: 720, ty: 1152, speed: 0, rot: 0 };
+        let starObj = { x: 720, y: 1152, scale: 1, shrinkRate: 0, rot: 0 };
+        let lastTime = 0;
+        let animFrameId = 0;
+
+        function startMinigame() {
+            fadeScreen(() => {
+                hideAllLayers();
+                UI.layers.minigame.classList.remove('hidden');
+                
+                const mgYay = document.getElementById('mg-yay');
+                const mgOh = document.getElementById('mg-oh');
+                const mgNextBtn = document.getElementById('mg-next-btn');
+                const mgReplayBtn = document.getElementById('mg-replay-btn');
+                const shakerEl = document.getElementById('mg-shaker');
+                const starEl = document.getElementById('mg-star');
+                
+                // Reset UI
+                mgYay.classList.add('hidden');
+                mgOh.classList.add('hidden');
+                mgNextBtn.classList.add('hidden');
+                mgReplayBtn.classList.add('hidden');
+                mgYay.classList.remove('animate-float-up-center');
+                mgOh.classList.remove('animate-float-up-center');
+                
+                shakerEl.style.opacity = '1';
+                starEl.style.opacity = '1';
+
+                // Setup Level Logic
+                score = 0;
+                targetScore = GOALS[currentLevel];
+                document.getElementById('mg-score').innerText = score;
+                document.getElementById('mg-target').innerText = targetScore;
+
+                // Center initially
+                shakerObj.x = 720; shakerObj.y = 1152;
+                shakerObj.tx = 720; shakerObj.ty = 1152;
+                starObj.x = 720; starObj.y = 1152;
+                starObj.scale = 1.0;
+
+                // Difficulty Scaling
+                // Level 0: Slow shaker, slow shrink. Level 2: Fast shaker, fast shrink.
+                shakerObj.speed = 350 + (currentLevel * 250); // pixels per sec
+                let shrinkTimeSeconds = 2.5 - (currentLevel * 0.5); // 2.5s -> 2.0s -> 1.5s
+                starObj.shrinkRate = 1.0 / shrinkTimeSeconds; 
+
+                // Event listener for star (supports touch and mouse)
+                starEl.onpointerdown = handleStarClick;
+
+                mgActive = true;
+                lastTime = performance.now();
+                pickNewTarget();
+                animFrameId = requestAnimationFrame(gameLoop);
+            });
+        }
+
+        function pickNewTarget() {
+            // Pick a random target inside the safe zone (padding 150px)
+            shakerObj.tx = 150 + Math.random() * (1440 - 300);
+            shakerObj.ty = 300 + Math.random() * (2304 - 600); // Leave room for stats
+        }
+
+        function gameLoop(time) {
+            if (!mgActive) return;
+
+            let dt = (time - lastTime) / 1000; // in seconds
+            // Cap DT in case tab was inactive
+            if (dt > 0.1) dt = 0.1;
+            lastTime = time;
+
+            // Update Shaker
+            let dx = shakerObj.tx - shakerObj.x;
+            let dy = shakerObj.ty - shakerObj.y;
+            let dist = Math.hypot(dx, dy);
+
+            if (dist < 20) {
+                pickNewTarget();
+            } else {
+                let moveX = (dx / dist) * shakerObj.speed * dt;
+                let moveY = (dy / dist) * shakerObj.speed * dt;
+                shakerObj.x += moveX;
+                shakerObj.y += moveY;
+            }
+            shakerObj.rot += 90 * dt; // Rotate 90deg per sec
+
+            // Update Star (Follows shaker smoothly via lerp)
+            starObj.x += (shakerObj.x - starObj.x) * (5.0 * dt);
+            starObj.y += (shakerObj.y - starObj.y) * (5.0 * dt);
+            starObj.rot -= 120 * dt; // Rotate opposite
+
+            // Shrink Star
+            starObj.scale -= starObj.shrinkRate * dt;
+
+            // Apply transforms (translate is centered via center pivot setup, but we use absolute coords)
+            const shakerEl = document.getElementById('mg-shaker');
+            const starEl = document.getElementById('mg-star');
+
+            // x, y are centers. Element is 250x250, so offset by 125
+            shakerEl.style.transform = `translate(${shakerObj.x - 125}px, ${shakerObj.y - 125}px) rotate(${shakerObj.rot}deg)`;
+            starEl.style.transform = `translate(${starObj.x - 125}px, ${starObj.y - 125}px) rotate(${starObj.rot}deg) scale(${Math.max(0, starObj.scale)})`;
+
+            // Loss Condition
+            if (starObj.scale <= 0) {
+                endMinigame(false);
+                return; // Stop loop
+            }
+
+            animFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function handleStarClick(e) {
+            e.preventDefault();
+            if (!mgActive) return;
+
+            score++;
+            document.getElementById('mg-score').innerText = score;
+            
+            if (score >= targetScore) {
+                endMinigame(true);
+            } else {
+                // Reset for next catch
+                starObj.scale = 1.0;
+                pickNewTarget();
+                // Randomize shaker position slightly on hit for more dynamic feel
+                shakerObj.x += (Math.random() - 0.5) * 200;
+                shakerObj.y += (Math.random() - 0.5) * 200;
+                // Keep in bounds loosely
+                shakerObj.x = Math.max(150, Math.min(1440-150, shakerObj.x));
+                shakerObj.y = Math.max(300, Math.min(2304-300, shakerObj.y));
+            }
+        }
+
+        function endMinigame(won) {
+            mgActive = false;
+            cancelAnimationFrame(animFrameId);
+            
+            const shakerEl = document.getElementById('mg-shaker');
+            const starEl = document.getElementById('mg-star');
+            starEl.onpointerdown = null; // Remove listener
+            
+            shakerEl.style.opacity = '0';
+            starEl.style.opacity = '0';
+
+            if (won) {
+                const yay = document.getElementById('mg-yay');
+                const nextBtn = document.getElementById('mg-next-btn');
+                yay.classList.remove('hidden');
+                yay.classList.add('animate-float-up-center');
+                
+                setTimeout(() => {
+                    nextBtn.classList.remove('hidden');
+                    nextBtn.onclick = () => {
+                        nextBtn.onclick = null;
+                        currentLevel++;
+                        if (currentLevel > 2) {
+                            showEnding();
+                        } else {
+                            playScene1();
+                        }
+                    };
+                }, 1000);
+
+            } else {
+                const oh = document.getElementById('mg-oh');
+                const replayBtn = document.getElementById('mg-replay-btn');
+                oh.classList.remove('hidden');
+                oh.classList.add('animate-float-up-center');
+
+                setTimeout(() => {
+                    replayBtn.classList.remove('hidden');
+                    replayBtn.onclick = () => {
+                        replayBtn.onclick = null;
+                        startMinigame(); // Restart level
+                    };
+                }, 1000);
+            }
+        }
+
+        function showEnding() {
+            fadeScreen(() => {
+                hideAllLayers();
+                UI.bgLayer.style.opacity = '0'; // Completely black background
+                UI.layers.ending.classList.remove('hidden');
+                
+                const endSprite = document.getElementById('end-sprite');
+                const tapArea = document.getElementById('end-tap-area');
+                
+                // Fade in gratitude sprite
+                setTimeout(() => {
+                    endSprite.style.opacity = '1';
+                    
+                    setTimeout(() => {
+                        tapArea.classList.remove('hidden');
+                        tapArea.onclick = () => {
+                            tapArea.onclick = null;
+                            // Restart game
+                            fadeScreen(() => {
+                                endSprite.style.opacity = '0';
+                                tapArea.classList.add('hidden');
+                                currentLevel = 0;
+                                playScene1();
+                            });
+                        };
+                    }, 1000); // Allow click after it fully appears
+                }, 500);
+            });
+        }
+
+        // Init Preloader
+        window.onload = initPreload;
+
+    </script>
+</body>
+</html>
+
+```
+
